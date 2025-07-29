@@ -10,17 +10,17 @@ import torchaudio as ta
 import torchaudio.transforms as T
 from torch import nn
 from sklearn.model_selection import train_test_split
+import random
+from sklearn.metrics import r2_score
 
 class SongObject:
   samples = []#each is a 5sec clip converted to mel spectrogram
   sampleRate = 0
-  arousal = 0.0
-  valence = 0.0
+  arousalValence = (0.0, 0.0)  # (arousal, valence)
   def __init__(self) -> None:
     self.samples = []
     self.sampleRate = 0
-    arousal = 0.0
-    valence = 0.0
+    self.arousalValence = (0.0, 0.0)
     pass
 
 print("DEAMTrainer")
@@ -52,7 +52,9 @@ transform = torch.nn.Sequential(
 
 transform = transform.to(device)
 
-for i in tqdm(range(1, 20)):#last 59 are long
+sampleStack = []
+avStack = []
+for i in tqdm(range(1, 2000)):#last 59 are long
   mPath = str(dataRoot + songSD + str(i) + ".mp3")
   if(os.path.exists(mPath)):
     #find deets in csv
@@ -67,51 +69,35 @@ for i in tqdm(range(1, 20)):#last 59 are long
       samples = torch.mean(samples, 0, keepdim = True)
 
     toAdd = SongObject()
-    toAdd.arousal = row[' arousal_mean'].values[0]
-    toAdd.valence = row[' valence_mean'].values[0]
+    arousal = ((row[' arousal_mean'].values[0])/10.0).astype(np.float32)
+    valence = ((row[' valence_mean'].values[0])/10.0).astype(np.float32)
 
     SAMPLE_LEN = 5
     NUM_SAMPLES = SAMPLE_LEN * sampleRate
 
     toAdd.sampleRate = sampleRate
 
-    sampleStack = []
     for k in range(0, len(samples[0]), NUM_SAMPLES):
       s = samples[0][k:k+NUM_SAMPLES]
 
       if((len(s) >= NUM_SAMPLES)):
         sampleStack += [transform(s).unsqueeze(0)]
-      toAdd.samples = torch.stack(sampleStack)  # stack all clips into a single tensor
+        avStack += [(arousal, valence)]
       del(s)
+    
     songData[i] = toAdd
 
 #atleast it caches them
 print("\nLoaded!")
+print(len(sampleStack))
+print(len(avStack))
 
-print(songData.keys())
-print(songData[10].samples.shape) 
+if(len(sampleStack) != len(avStack)):
+  print("Error: Sample count and Arousal/Valence count mismatch!")
+  exit(0)
 
-#samples, sr = librosa.load(mPath, sr=44100, mono=True)
 
-'''
-plt.figure(figsize=(12, 4))
-plt.subplot(1, 2, 2)
-displaySong = 10
-print(str(songData[displaySong].sampleRate) + " Valence: " + str(songData[displaySong].valence)
-                                      + " Arousal: " + str(songData[displaySong].arousal))
-
-#librosa.display.specshow(songData[displaySong].samples[0], sr=songData[displaySong].sampleRate, hop_length=512, x_axis='time', y_axis='mel')
-x = songData[displaySong].samples[0].cpu()
-plt.imshow(x, aspect='auto', origin='lower', cmap='magma')
-plt.colorbar(format='%+2.0f dB')
-plt.title(f'Mel-Spectrogram for Song ID {displaySong} (First 5s Segment)')
-plt.tight_layout()
-
-plt.show()
-#
-'''
-
-validIDs = list(songData.keys())
+validIDs = list(range(len(sampleStack)))
 trainIDs, testIDs = train_test_split(validIDs, test_size=0.3)
 
 
@@ -136,7 +122,8 @@ class MoodDEAM(nn.Module):
     nn.Linear(128 * 14 * 52, 256),
     nn.ReLU(),
     nn.Dropout(0.5),
-    nn.Linear(256, 2)
+    nn.Linear(256, 2),
+    nn.Sigmoid()
     ).to(device)
 
   def forward(self, input):
@@ -147,15 +134,59 @@ model = MoodDEAM().to(device)
 #print(model)
 
 lossFunc = nn.MSELoss()
-optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
 
-EPOCHS = 10
+EPOCHS = 50
+BATCH_SIZE = 32
 
 for i in range(EPOCHS):
+  random.shuffle(trainIDs)
+  
   print("Epoch: " + str(i + 1))
 
-  for j in trainIDs:
+  model.train()
+  for j in range(0, len(trainIDs), BATCH_SIZE):
     #all the clips should already be in gpu
-    prediction = model(songData[j].samples)
-    print(prediction.shape)
-    print(prediction)
+    trainSampleStack = []
+    trainAvStack = []
+    for k in range(j, min(j + BATCH_SIZE, len(trainIDs))):
+      trainSampleStack += [sampleStack[trainIDs[k]]]
+      trainAvStack += [avStack[trainIDs[k]]]
+
+    trainSampleStack = torch.stack(trainSampleStack).to(device)
+    trainAvStack = torch.tensor(trainAvStack, dtype=torch.float32)
+
+    #print(trainAvStack.shape)
+    #print(trainSampleStack.shape)
+
+    prediction = model(trainSampleStack)
+    outp = trainAvStack.to(device)
+    optimizer.zero_grad()
+    loss = lossFunc(prediction, outp)
+    loss.backward()
+    optimizer.step()
+  
+  print("Loss: ", loss.item())
+  model.eval()
+
+  testLabelsP = []
+  testLabelsC = []
+
+  for k in testIDs:
+  #print("Testing on ID: " + str(k))
+    with torch.no_grad():
+      prediction = model(sampleStack[k].unsqueeze(0).to(device))
+      outp = avStack[k]
+      testLabelsP += [prediction.cpu().numpy().flatten()]
+      testLabelsC += [(outp)]
+    #print(str(prediction[0]) + " vs " + str(outp))
+
+  testLabelsC = np.array(testLabelsC)
+  testLabelsP = np.array(testLabelsP)
+  #print(testLabelsC)
+  #print(testLabelsP)
+  r2_arousal = r2_score(testLabelsC[:, 0], testLabelsP[:, 0])
+  r2_valence = r2_score(testLabelsC[:, 1], testLabelsP[:, 1])
+
+  print(f"R2 (Arousal): {r2_arousal:.4f}")
+  print(f"R2 (Valence): {r2_valence:.4f}")

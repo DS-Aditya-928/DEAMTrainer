@@ -99,17 +99,20 @@ if(len(sampleStack) != len(avStack)):
 
 validIDs = list(range(len(sampleStack)))
 trainIDs, testIDs = train_test_split(validIDs, test_size=0.3)
+''' nn.Conv2d(512, 1024, kernel_size=3),
+    nn.ReLU(),
+    nn.MaxPool2d(2),
+
+    
+    
+'''
 
 
 class MoodDEAM(nn.Module):
   def __init__(self):
     super().__init__()
     self.modelArch = nn.Sequential(
-    nn.Conv2d(1, 32, kernel_size=3),  # Expects input of shape [B, 1, 128, 431]
-    nn.ReLU(),
-    nn.MaxPool2d(2),
-
-    nn.Conv2d(32, 64, kernel_size=3),
+    nn.Conv2d(1, 64, kernel_size=3),  # Expects input of shape [B, 1, 128, 431]
     nn.ReLU(),
     nn.MaxPool2d(2),
 
@@ -117,9 +120,17 @@ class MoodDEAM(nn.Module):
     nn.ReLU(),
     nn.MaxPool2d(2),
 
+    nn.Conv2d(128, 256, kernel_size=3),
+    nn.ReLU(),
+    nn.MaxPool2d(2),
+
+    nn.Conv2d(256, 512, kernel_size=3),
+    nn.ReLU(),
+    nn.MaxPool2d(2),
+
     nn.Flatten(),
 
-    nn.Linear(128 * 14 * 52, 256),
+    nn.Linear(128 * 600, 256),
     nn.ReLU(),
     nn.Dropout(0.5),
     nn.Linear(256, 2),
@@ -134,7 +145,7 @@ model = MoodDEAM().to(device)
 #print(model)
 
 lossFunc = nn.MSELoss()
-optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
+optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
 
 EPOCHS = 50
 BATCH_SIZE = 32
@@ -145,7 +156,7 @@ for i in range(EPOCHS):
   print("Epoch: " + str(i + 1))
 
   model.train()
-  for j in range(0, len(trainIDs), BATCH_SIZE):
+  for j in tqdm(range(0, len(trainIDs), BATCH_SIZE)):
     #all the clips should already be in gpu
     trainSampleStack = []
     trainAvStack = []
@@ -172,7 +183,7 @@ for i in range(EPOCHS):
   testLabelsP = []
   testLabelsC = []
 
-  for k in testIDs:
+  for k in tqdm(testIDs):
   #print("Testing on ID: " + str(k))
     with torch.no_grad():
       prediction = model(sampleStack[k].unsqueeze(0).to(device))

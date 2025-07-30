@@ -99,9 +99,7 @@ if(len(sampleStack) != len(avStack)):
 
 validIDs = list(range(len(sampleStack)))
 trainIDs, testIDs = train_test_split(validIDs, test_size=0.3)
-''' nn.Conv2d(512, 1024, kernel_size=3),
-    nn.ReLU(),
-    nn.MaxPool2d(2),
+''' 
 
     
     
@@ -128,12 +126,16 @@ class MoodDEAM(nn.Module):
     nn.ReLU(),
     nn.MaxPool2d(2),
 
+    nn.Conv2d(512, 1024, kernel_size=3),
+    nn.ReLU(),
+    nn.MaxPool2d(2),
+
     nn.Flatten(),
 
-    nn.Linear(128 * 600, 256),
+    nn.Linear(1024 * 2 * 11, 1024),
     nn.ReLU(),
     nn.Dropout(0.5),
-    nn.Linear(256, 2),
+    nn.Linear(1024, 2),
     nn.Sigmoid()
     ).to(device)
 
@@ -142,13 +144,15 @@ class MoodDEAM(nn.Module):
 
 
 model = MoodDEAM().to(device)
-#print(model)
+print(model)
 
 lossFunc = nn.MSELoss()
-optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
 
 EPOCHS = 50
 BATCH_SIZE = 32
+
+bestR2 = -float('inf')
 
 for i in range(EPOCHS):
   random.shuffle(trainIDs)
@@ -201,3 +205,8 @@ for i in range(EPOCHS):
 
   print(f"R2 (Arousal): {r2_arousal:.4f}")
   print(f"R2 (Valence): {r2_valence:.4f}")
+
+  if(((r2_arousal + r2_valence) >= bestR2) and i >= 0):
+    print("Record high!")
+    torch.save(model.state_dict(), "C:\\NNModels\\DEAM.pth")
+    bestR2 = r2_arousal + r2_valence

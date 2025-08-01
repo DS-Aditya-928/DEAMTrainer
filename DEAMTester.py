@@ -17,7 +17,7 @@ class MoodDEAM(nn.Module):
   def __init__(self):
     super().__init__()
     self.modelArch = nn.Sequential(
-    nn.Conv2d(1, 64, kernel_size=3),  # Expects input of shape [B, 1, 128, 431]
+    nn.Conv2d(1, 64, kernel_size=3), 
     nn.ReLU(),
     nn.MaxPool2d(2),
 
@@ -73,9 +73,9 @@ transform = torch.nn.Sequential(
         n_fft=2048,
         hop_length=512,
         n_mels=128,
-        power=2.0  # power=2.0 for power spectrogram (use with AmplitudeToDB)
+        power=2.0 
     ),
-    T.AmplitudeToDB(stype="power", top_db=80)  # convert to dB
+    T.AmplitudeToDB(stype="power", top_db=80)
 )
 
 transform = transform.to(device)

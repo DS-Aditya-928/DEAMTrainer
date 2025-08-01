@@ -69,8 +69,8 @@ for i in tqdm(range(1, 2000)):#last 59 are long
       samples = torch.mean(samples, 0, keepdim = True)
 
     toAdd = SongObject()
-    arousal = ((row[' arousal_mean'].values[0])/10.0).astype(np.float32)
-    valence = ((row[' valence_mean'].values[0])/10.0).astype(np.float32)
+    arousal = ((row[' arousal_mean'].values[0] - 1)/8.0).astype(np.float32)
+    valence = ((row[' valence_mean'].values[0] - 1)/8.0).astype(np.float32)
 
     SAMPLE_LEN = 5
     NUM_SAMPLES = SAMPLE_LEN * sampleRate

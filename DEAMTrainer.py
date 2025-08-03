@@ -39,18 +39,6 @@ df = pandas.read_csv(str(dataRoot + annoSD))
 SAMPLE_RATE = 44100
 
 #build transformation pipeline
-transform = torch.nn.Sequential(
-    T.MelSpectrogram(
-        sample_rate=44100,
-        n_fft=2048,
-        hop_length=512,
-        n_mels=128,
-        power=2.0  
-    ),
-    T.AmplitudeToDB(stype="power", top_db=80)
-)
-
-transform = transform.to(device)
 
 sampleStack = []
 avStack = []
@@ -107,6 +95,16 @@ trainIDs, testIDs = train_test_split(validIDs, test_size=0.3)
 
 
 class MoodDEAM(nn.Module):
+  transform = torch.nn.Sequential(
+    T.MelSpectrogram(
+        sample_rate=44100,
+        n_fft=2048,
+        hop_length=512,
+        n_mels=128,
+        power=2.0  
+    ),
+    T.AmplitudeToDB(stype="power", top_db=80)
+  )
   def __init__(self):
     super().__init__()
     self.modelArch = nn.Sequential(
@@ -140,7 +138,8 @@ class MoodDEAM(nn.Module):
     ).to(device)
 
   def forward(self, input):
-    return self.modelArch(input)
+    mSpec = self.transform(input)
+    return self.modelArch(mSpec)
 
 
 model = MoodDEAM().to(device)

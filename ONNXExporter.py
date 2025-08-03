@@ -95,7 +95,7 @@ for k in range(0, len(samples[0]), NUM_SAMPLES):
 
 print("\nLoaded!")
 print(len(sampleStack))
-#sampleStack = torch.randn(4, 1, 128, 431).to(device)
+sampleStack = torch.randn(4, 1, 128, 431).to(device)
 
 '''
 onnx_program = torch.onnx.export(model, args = sampleStack, dynamo=True, input_names=["input"],
